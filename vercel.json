@@ -1,0 +1,23 @@
+
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "routes": [
+    {
+      "src": "/",
+      "has": [
+        {
+          "type": "query",
+          "key": "token",
+          "value": "(?<ticketToken>.*)"
+        }
+      ],
+      "dest": "https://script.google.com/macros/s/AKfycbym1psX1O0vqMUb6PfzwuHp72VK-nm70h7vU0YNTFLaeOFnndHEidHJa_Uwfhv7Cab5/exec?token=:ticketToken&forward=1",
+      "status": 302
+    },
+    {
+      "src": "/",
+      "dest": "https://script.google.com/macros/s/AKfycbym1psX1O0vqMUb6PfzwuHp72VK-nm70h7vU0YNTFLaeOFnndHEidHJa_Uwfhv7Cab5/exec?forward=1",
+      "status": 302
+    }
+  ]
+}
