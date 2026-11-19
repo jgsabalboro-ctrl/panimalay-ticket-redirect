@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panimalay — QR Camera</title>
+  <!-- This public page ONLY reads QR codes. Verification and redemption stay in Apps Script. -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root { --brown:#3B2A22; --tan:#C8A989; --cream:#FAF8F5; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:18px; background:var(--cream); color:var(--brown);
+      font-family:Arial,sans-serif; }
+    .card { max-width:520px; margin:auto; background:white; border-radius:18px;
+      padding:24px; box-shadow:0 8px 24px #3b2a221a; }
+    .logo { font-size:21px; font-weight:800; letter-spacing:3px; }
+    .sub { margin-top:8px; color:#90705f; font-size:12px; letter-spacing:1px; }
+    p { font-size:13px; color:#7d6859; line-height:1.55; }
+    button { width:100%; margin:10px 0 0; padding:14px; border:0;
+      border-radius:9px; background:var(--brown); color:white; cursor:pointer;
+      font-size:15px; font-weight:bold; }
+    button:disabled { opacity:.5; }
+    .secondary { background:#efe7df; color:var(--brown); }
+    #reader { width:100%; margin-top:15px; overflow:hidden; border-radius:12px; }
+    #reader video { max-width:100%; }
+    #result { margin:16px 0 0; padding:12px; background:#f4eee6; border-radius:10px;
+      font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+    #captured { width:100%; min-height:78px; margin-top:12px; padding:10px;
+      border:1px solid #ccc; border-radius:8px; font-family:monospace; resize:vertical; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">PANIMALAY</div>
+    <div class="sub">COFFEE RAVE · QR CAMERA</div>
+    <h2>Scan a guest ticket</h2>
+    <p>Tap Start Camera and allow camera permission. Point your phone at the guest's QR code.
+      The scan will be sent back to your open Staff Check-in page automatically when possible.</p>
+
+    <button id="start" onclick="startCamera()">START CAMERA</button>
+    <button id="stop" class="secondary hidden" onclick="stopCamera()">STOP CAMERA</button>
+    <div id="reader"></div>
+    <div id="result" role="status">Waiting for camera...</div>
+
+    <section id="copySection" class="hidden">
+      <p>If your Staff Check-in page did not receive the scan, copy this value and paste
+        it into its manual fallback field.</p>
+      <textarea id="captured" readonly aria-label="Scanned ticket value"></textarea>
+      <button class="secondary" onclick="copyResult()">COPY SCANNED VALUE</button>
+    </section>
+  </div>
+
+  <script>
+    let scanner = null;
+    let scanning = false;
+    let received = false;
+    const byId = id => document.getElementById(id);
+
+    async function startCamera() {
+      received = false;
+      byId('copySection').classList.add('hidden');
+      byId('result').textContent = 'Starting camera...';
+      if (typeof Html5Qrcode === 'undefined') {
+        byId('result').textContent = 'Camera scanner library did not load. Check your connection.';
+        return;
+      }
+      byId('start').disabled = true;
+      try {
+        scanner = new Html5Qrcode('reader', {
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+        });
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
+          onScan,
+          () => {}
+        );
+        scanning = true;
+        byId('start').classList.add('hidden');
+        byId('stop').classList.remove('hidden');
+        byId('result').textContent = 'Camera active. Hold a QR code in view.';
+      } catch (error) {
+        byId('result').textContent = 'Could not open camera: ' +
+          (error && error.message ? error.message : String(error)) +
+          '. You can still paste a ticket link in Staff Check-in.';
+        byId('start').disabled = false;
+      }
+    }
+
+    async function stopCamera() {
+      if (scanner && scanning) {
+        try { await scanner.stop(); } catch (error) { /* camera already stopped */ }
+      }
+      scanning = false;
+      byId('start').disabled = false;
+      byId('start').classList.remove('hidden');
+      byId('stop').classList.add('hidden');
+    }
+
+    async function onScan(decodedText) {
+      if (received) return;
+      received = true;
+      await stopCamera();
+      byId('captured').value = String(decodedText || '');
+      byId('copySection').classList.remove('hidden');
+      byId('result').textContent = 'QR scanned. Sending to the Staff Check-in page...';
+
+      if (window.opener && !window.opener.closed) {
+        // Staff.html verifies sender origin + popup window identity.
+        window.opener.postMessage({ type: 'PANIMALAY_QR_SCAN', value: decodedText }, '*');
+        byId('result').textContent = 'Scan sent. Return to Staff Check-in to verify and redeem.';
+        setTimeout(() => window.close(), 900);
+      } else {
+        byId('result').textContent = 'QR scanned. Copy the value below and paste it in Staff Check-in.';
+      }
+    }
+
+    async function copyResult() {
+      const field = byId('captured');
+      try {
+        await navigator.clipboard.writeText(field.value);
+        byId('result').textContent = 'Copied. Return to Staff Check-in and paste it.';
+      } catch (error) {
+        field.focus();
+        field.select();
+        byId('result').textContent = 'Select the highlighted text and copy it manually.';
+      }
+    }
+  </script>
+</body>
+</html>
